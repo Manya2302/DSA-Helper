@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { TraceStep } from "@/lib/code-tracer";
 
 interface EnhancedMonacoEditorProps {
@@ -16,213 +16,131 @@ export function EnhancedMonacoEditor({
   language, 
   onChange, 
   height = "400px",
-  theme = "vs-dark",
   currentTraceStep,
   onLineHighlight
 }: EnhancedMonacoEditorProps) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const monacoRef = useRef<any>(null);
-  const editorInstanceRef = useRef<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    // Load Monaco Editor dynamically
-    const loadMonaco = async () => {
-      if (typeof window !== 'undefined' && !monacoRef.current) {
-        try {
-          // Load Monaco from CDN
-          await loadScript('https://unpkg.com/monaco-editor@latest/min/vs/loader.js');
-          
-          // Give time for the script to load and initialize
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          if (!(window as any).require) {
-            console.error('Monaco loader failed to initialize');
-            return;
-          }
-          
-          (window as any).require.config({ 
-            paths: { vs: 'https://unpkg.com/monaco-editor@latest/min/vs' } 
-          });
-          
-          (window as any).require(['vs/editor/editor.main'], (monaco: any) => {
-            if (monaco && monaco.editor) {
-              monacoRef.current = monaco;
-              initializeEditor();
-            } else {
-              console.error('Monaco editor object not properly loaded');
-            }
-          });
-        } catch (error) {
-          console.error('Failed to load Monaco Editor:', error);
-        }
-      }
-    };
-
-    const initializeEditor = () => {
-      if (editorRef.current && monacoRef.current && monacoRef.current.editor && !editorInstanceRef.current) {
-        try {
-          editorInstanceRef.current = monacoRef.current.editor.create(editorRef.current, {
-            value,
-            language,
-            theme,
-            automaticLayout: true,
-            fontSize: 14,
-            lineNumbers: 'on',
-            roundedSelection: false,
-            scrollBeyondLastLine: false,
-            readOnly: false,
-            minimap: { enabled: false },
-            folding: true,
-            lineDecorationsWidth: 30,
-            lineNumbersMinChars: 4,
-            glyphMargin: true,
-          });
-
-          // Set up change listener
-          editorInstanceRef.current.onDidChangeModelContent(() => {
-            const newValue = editorInstanceRef.current.getValue();
-            onChange(newValue);
-          });
-
-          // Set up click listener for line debugging
-          editorInstanceRef.current.onMouseDown((e: any) => {
-            if (e.target?.position) {
-              const lineNumber = e.target.position.lineNumber;
-              onLineHighlight?.(lineNumber);
-            }
-          });
-        } catch (error) {
-          console.error('Failed to initialize Monaco Editor:', error);
-        }
-      }
-    };
-
-    loadMonaco();
-
-    return () => {
-      if (editorInstanceRef.current) {
-        editorInstanceRef.current.dispose();
-        editorInstanceRef.current = null;
-      }
-    };
-  }, []);
-
-  // Update editor value when prop changes
-  useEffect(() => {
-    if (editorInstanceRef.current && value !== editorInstanceRef.current.getValue()) {
-      editorInstanceRef.current.setValue(value);
+  // Handle line clicking for debugging - properly memoized
+  const handleTextareaClick = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    if (textareaRef.current && onLineHighlight) {
+      const textarea = textareaRef.current;
+      const clickPosition = textarea.selectionStart;
+      const textBeforeCursor = textarea.value.substring(0, clickPosition);
+      const lineNumber = textBeforeCursor.split('\n').length; // Fixed: no -1 needed
+      onLineHighlight(lineNumber - 1); // Pass 0-based index
     }
-  }, [value]);
+  }, [onLineHighlight]);
 
-  // Update editor language when prop changes
-  useEffect(() => {
-    if (editorInstanceRef.current && monacoRef.current) {
-      const model = editorInstanceRef.current.getModel();
-      if (model) {
-        monacoRef.current.editor.setModelLanguage(model, language);
+  // Handle textarea change properly for controlled component
+  const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value);
+  }, [onChange]);
+
+  // Calculate which lines to highlight
+  const getHighlightedText = () => {
+    if (!currentTraceStep) return value;
+    
+    const lines = value.split('\n');
+    const currentLine = currentTraceStep.lineNumber;
+    
+    return lines.map((line, index) => {
+      if (index === currentLine) {
+        return `>>> ${line} <<<`;  // Simple highlight indicator
       }
-    }
-  }, [language]);
-
-  // Highlight current execution line
-  useEffect(() => {
-    if (editorInstanceRef.current && monacoRef.current && currentTraceStep) {
-      const model = editorInstanceRef.current.getModel();
-      if (model) {
-        // Clear previous decorations
-        const oldDecorations = editorInstanceRef.current.getModel().getAllDecorations();
-        editorInstanceRef.current.removeDecorations(oldDecorations.map((d: any) => d.id));
-
-        // Add new decoration for current line
-        const decorations = [{
-          range: new monacoRef.current.Range(
-            currentTraceStep.lineNumber + 1, 1, 
-            currentTraceStep.lineNumber + 1, 1
-          ),
-          options: {
-            isWholeLine: true,
-            className: 'current-execution-line',
-            glyphMarginClassName: 'current-execution-glyph',
-            marginClassName: 'current-execution-margin',
-            linesDecorationsClassName: 'current-execution-decoration'
-          }
-        }];
-
-        editorInstanceRef.current.deltaDecorations([], decorations);
-
-        // Scroll to current line
-        editorInstanceRef.current.revealLineInCenter(currentTraceStep.lineNumber + 1);
-      }
-    }
-  }, [currentTraceStep]);
-
-  // Fallback to simple textarea if Monaco fails
-  if (!monacoRef.current || !editorInstanceRef.current) {
-    return (
-      <div className="relative">
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full h-96 p-4 font-mono text-sm bg-secondary text-foreground border border-border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-          placeholder={`Enter your ${language} code here...`}
-          spellCheck={false}
-          data-testid="fallback-code-editor"
-        />
-        <div className="absolute top-2 right-2 text-xs text-muted-foreground bg-background px-2 py-1 rounded">
-          {language} (fallback editor)
-        </div>
-      </div>
-    );
-  }
+      return line;
+    }).join('\n');
+  };
 
   return (
     <div className="relative">
       <style>{`
-        .current-execution-line {
-          background-color: rgba(255, 215, 0, 0.2) !important;
-          border: 2px solid rgba(255, 215, 0, 0.8) !important;
+        .code-editor {
+          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+          font-size: 14px;
+          line-height: 1.6;
+          background-color: var(--secondary);
+          color: var(--foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 16px;
+          resize: none;
+          width: 100%;
+          height: ${height};
+          outline: none;
+          tab-size: 2;
+          white-space: pre;
+          overflow-wrap: normal;
+          overflow-x: auto;
         }
-        .current-execution-glyph {
-          background-color: rgba(255, 215, 0, 0.8) !important;
-          width: 16px !important;
+        .code-editor:focus {
+          border-color: var(--primary);
+          box-shadow: 0 0 0 2px rgba(var(--primary), 0.2);
         }
-        .current-execution-glyph::after {
-          content: "▶";
-          color: white;
-          font-size: 12px;
-          line-height: 1;
+        .code-editor-container {
+          position: relative;
         }
-        .current-execution-decoration {
-          background-color: rgba(255, 215, 0, 0.6) !important;
-          width: 4px !important;
+        .line-numbers {
+          position: absolute;
+          left: 0;
+          top: 16px;
+          padding: 0 8px;
+          background-color: var(--muted);
+          color: var(--muted-foreground);
+          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+          font-size: 14px;
+          line-height: 1.6;
+          text-align: right;
+          user-select: none;
+          border-right: 1px solid var(--border);
+          width: 40px;
+          overflow: hidden;
+        }
+        .code-editor-with-numbers {
+          padding-left: 56px;
         }
       `}</style>
-      <div 
-        ref={editorRef} 
-        style={{ height, border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}
-        className="monaco-editor-container"
-      />
-      {currentTraceStep && (
-        <div className="absolute top-2 right-2 bg-yellow-500 text-black px-2 py-1 rounded text-xs font-mono">
-          Line {currentTraceStep.lineNumber + 1}: {currentTraceStep.action}
+      
+      <div className="code-editor-container">
+        {/* Line numbers */}
+        <div className="line-numbers">
+          {value.split('\n').map((_, index) => (
+            <div 
+              key={index}
+              style={{ 
+                backgroundColor: currentTraceStep?.lineNumber === index ? 'rgba(255, 215, 0, 0.3)' : 'transparent',
+                fontWeight: currentTraceStep?.lineNumber === index ? 'bold' : 'normal'
+              }}
+            >
+              {index + 1}
+            </div>
+          ))}
         </div>
-      )}
+        
+        {/* Code editor */}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={handleTextareaChange}
+          onClick={handleTextareaClick}
+          className="code-editor code-editor-with-numbers"
+          placeholder={`Enter your ${language} code here...`}
+          spellCheck={false}
+          data-testid="enhanced-code-editor"
+        />
+        
+        {/* Language indicator */}
+        <div className="absolute top-2 right-2 text-xs text-muted-foreground bg-background px-2 py-1 rounded">
+          {language}
+        </div>
+        
+        {/* Current execution indicator */}
+        {currentTraceStep && (
+          <div className="absolute top-8 right-2 bg-yellow-500 text-black px-2 py-1 rounded text-xs font-mono">
+            ▶ Line {currentTraceStep.lineNumber + 1}: {currentTraceStep.action}
+          </div>
+        )}
+      </div>
     </div>
   );
-}
-
-// Utility function to load external scripts
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = src;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-    document.head.appendChild(script);
-  });
 }

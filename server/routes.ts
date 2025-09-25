@@ -289,10 +289,10 @@ function generateSortingTraceSteps(lines: string[], input: any) {
   const array = extractArrayFromCode(lines) || input || [19, 7, 15, 12, 16, 18, 4, 11, 13];
   const steps = [];
   
-  // Initial array state
+  // Array initialization step
   steps.push({
-    lineNumber: 0,
-    lineContent: lines[0] || `function quickSort(arr) {`,
+    lineNumber: 1,
+    lineContent: lines[1] || `const arr = [${array.join(', ')}];`,
     variables: { arr: [...array] },
     dataStructures: [{
       type: 'array',
@@ -300,15 +300,28 @@ function generateSortingTraceSteps(lines: string[], input: any) {
       data: [...array],
       metadata: { size: array.length }
     }],
-    description: `Initial Array: [${array.join(', ')}]`,
+    description: `Initialize Array: [${array.join(', ')}]`,
     action: 'INIT_ARRAY',
     timestamp: Date.now(),
-    memoryState: { heap: { arr: array }, stack: [{ function: 'quickSort', variables: { arr: array }, lineNumber: 0 }] }
+    memoryState: { heap: { arr: array }, stack: [{ function: 'quickSort', variables: { arr: array }, lineNumber: 1 }] }
   });
 
   // Analyze the actual code structure
   const pivotStrategy = analyzePivotStrategy(lines);
-  const pivotIndex = pivotStrategy === 'middle' ? Math.floor(array.length / 2) : array.length - 1;
+  let pivotIndex: number;
+  switch (pivotStrategy) {
+    case 'first':
+      pivotIndex = 0;
+      break;
+    case 'middle':
+      pivotIndex = Math.floor(array.length / 2);
+      break;
+    case 'random':
+      pivotIndex = Math.floor(Math.random() * array.length);
+      break;
+    default: // 'last'
+      pivotIndex = array.length - 1;
+  }
   const pivotValue = array[pivotIndex];
   
   steps.push({
@@ -329,7 +342,7 @@ function generateSortingTraceSteps(lines: string[], input: any) {
   });
 
   // Real partitioning based on the actual code logic
-  const { left, right } = realPartition(array, pivotValue);
+  const { left, right, equal } = realPartition(array, pivotValue);
   
   steps.push({
     lineNumber: findLineWithPattern(lines, /for|while/i) || 2,
@@ -344,7 +357,7 @@ function generateSortingTraceSteps(lines: string[], input: any) {
       pivot: left.length,
       metadata: { size: array.length, partitioning: true }
     }],
-    description: `Partition the array into two sub-arrays:\n\nLeft (≤${pivotValue}): [${left.join(', ')}]\nPivot: ${pivotValue}\nRight (>${pivotValue}): [${right.join(', ')}]\n\nResult:\n[${left.join(', ')}] | ${pivotValue} | [${right.join(', ')}]`,
+    description: `Partition the array into sub-arrays:\n\nLeft (<${pivotValue}): [${left.join(', ')}]\nEqual (=${pivotValue}): [${equal.join(', ')}]\nRight (>${pivotValue}): [${right.join(', ')}]\n\nResult:\n[${left.join(', ')}] | [${equal.join(', ')}] | [${right.join(', ')}]`,
     action: 'PARTITION',
     timestamp: Date.now(),
     memoryState: { heap: { arr: array, left, right, pivot: pivotValue }, stack: [{ function: 'partition', variables: { arr: array, left, right }, lineNumber: 2 }] }
@@ -389,8 +402,8 @@ function generateSortingTraceSteps(lines: string[], input: any) {
     });
   }
 
-  // Final result
-  const sortedArray = [...left.sort((a, b) => a - b), pivotValue, ...right.sort((a, b) => a - b)];
+  // Final result - properly handle duplicates
+  const sortedArray = [...left.sort((a, b) => a - b), ...equal, ...right.sort((a, b) => a - b)];
   steps.push({
     lineNumber: lines.length - 1,
     lineContent: lines[lines.length - 1] || 'return [...quickSort(left), pivot, ...quickSort(right)];',
@@ -421,14 +434,18 @@ function extractArrayFromCode(lines: string[]): number[] | null {
   return null;
 }
 
-function analyzePivotStrategy(lines: string[]): 'first' | 'middle' | 'last' {
+function analyzePivotStrategy(lines: string[]): 'first' | 'middle' | 'last' | 'random' {
   const codeText = lines.join(' ').toLowerCase();
-  if (codeText.includes('math.floor') && codeText.includes('length / 2')) {
+  if (codeText.includes('math.random') || codeText.includes('random')) {
+    return 'random';
+  } else if ((codeText.includes('math.floor') || codeText.includes('math.ceil')) && (codeText.includes('length / 2') || codeText.includes('length/2'))) {
     return 'middle';
-  } else if (codeText.includes('[0]')) {
+  } else if (codeText.includes('[0]') || codeText.includes('arr[0]')) {
     return 'first';
+  } else if (codeText.includes('length - 1') || codeText.includes('length-1')) {
+    return 'last';
   }
-  return 'last';
+  return 'last'; // default assumption
 }
 
 function findLineWithPattern(lines: string[], pattern: RegExp): number | null {
@@ -440,10 +457,22 @@ function findLineWithPattern(lines: string[], pattern: RegExp): number | null {
   return null;
 }
 
-function realPartition(array: number[], pivot: number): { left: number[], right: number[] } {
+function realPartition(array: number[], pivot: number): { left: number[], right: number[], equal: number[] } {
   const left = array.filter(x => x < pivot);
   const right = array.filter(x => x > pivot);
-  return { left, right };
+  const equal = array.filter(x => x === pivot);
+  return { left, right, equal };
+}
+
+function getComplexityInfo(algorithmType: string) {
+  switch (algorithmType) {
+    case 'sorting':
+      return { time: 'O(n log n)', space: 'O(log n)' };
+    case 'searching':
+      return { time: 'O(log n)', space: 'O(1)' };
+    default:
+      return { time: 'O(n)', space: 'O(1)' };
+  }
 }
 
 function generateSearchingTraceSteps(lines: string[], input: any) {

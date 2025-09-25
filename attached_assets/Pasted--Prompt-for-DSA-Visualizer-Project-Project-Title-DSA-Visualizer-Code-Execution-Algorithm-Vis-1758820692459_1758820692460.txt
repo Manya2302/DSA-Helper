@@ -1,0 +1,69 @@
+🚀 Prompt for DSA Visualizer Project
+
+Project Title:
+DSA Visualizer – Code Execution + Algorithm Visualization
+
+Goal:
+Build an interactive website where users input their code in various languages (C, C++, Python, Java, JavaScript, etc.). The system will:
+
+Detect the type of algorithm (sorting, searching, graph traversal, recursion, etc.).
+
+Execute the code securely in a sandbox environment.
+
+Generate real-time visualizations (charts, animations, trees, graphs) that help users understand the algorithm’s working step by step.
+
+Features:
+
+Multi-language support (C, C++, Python, Java, JavaScript, etc.).
+
+Code editor with syntax highlighting (use Monaco Editor or CodeMirror).
+
+API backend for code execution (e.g., Judge0 API, Sphere Engine, or self-hosted sandbox with Docker).
+
+Visualization engine using D3.js, Chart.js, or custom canvas/SVG animations.
+
+Algorithm type detection: identify if the code is sorting, searching, graph traversal, etc.
+
+Step-by-step execution control (Play, Pause, Step Forward).
+
+Example codes for each algorithm to help learners.
+
+Save/share visualization as image or video.
+
+Tech Stack:
+
+Frontend: React.js (or Next.js) + TailwindCSS for UI
+
+Editor: Monaco Editor (used in VS Code)
+
+Backend: Node.js/Express or Python (Flask/Django/FastAPI)
+
+Execution API: Judge0 API for running code securely
+
+Visualization: D3.js or custom SVG animations
+
+Database (Optional): PostgreSQL/MongoDB for storing user codes
+
+Workflow:
+
+User selects language → enters/pastes code.
+
+User clicks Visualize → backend executes code safely via API.
+
+Algorithm detection engine parses the code (keywords like quicksort, merge, dfs, etc.).
+
+Visualization module generates graphical representation (bars for sorting, nodes/edges for graphs, recursion trees, etc.).
+
+User can interact with the visualization (step through execution).
+
+Example User Flow:
+
+User selects Python.
+
+Enters quicksort code.
+
+Clicks Visualize.
+
+Website detects sorting algorithm → runs code step by step.
+
+Displays bar chart animation for sorting OR recursion tree like the uploaded image.

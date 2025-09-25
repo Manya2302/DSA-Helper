@@ -32,6 +32,7 @@ interface Algorithm {
 interface ExecutionResult {
   success: boolean;
   algorithmType: string;
+  language: string;
   executionTime: number;
   memoryUsage: number;
   output?: string;
@@ -41,6 +42,12 @@ interface ExecutionResult {
   foundIndex?: number;
   visitOrder?: number[];
   steps: any[];
+  finalState?: any;
+  complexityAnalysis?: {
+    timeComplexity: string;
+    spaceComplexity: string;
+    operations: number;
+  };
 }
 
 interface DetectionResult {

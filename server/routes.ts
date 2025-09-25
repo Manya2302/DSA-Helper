@@ -20,7 +20,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/algorithms/category/:category", async (req, res) => {
     try {
       const { category } = req.params;
-      const algorithms = await storage.getAlgorithmsByCategory(category);
+      const allAlgorithms = getLocalAlgorithmExamples();
+      const algorithms = allAlgorithms.filter(alg => alg.category.toLowerCase() === category.toLowerCase());
       res.json(algorithms);
     } catch (error) {
       console.error("Error fetching algorithms by category:", error);
